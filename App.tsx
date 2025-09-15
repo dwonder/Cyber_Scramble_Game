@@ -11,6 +11,7 @@ import Button from './components/Button';
 import Timer from './components/Timer';
 import MuteButton from './components/MuteButton';
 import StartScreen from './components/StartScreen';
+import HintCounter from './components/HintCounter';
 
 const SOUNDS = {
   CORRECT: 'https://aistudiocdn.com/games/cyber-scramble/correct.mp3',
@@ -105,6 +106,11 @@ const App: React.FC = () => {
   const [highScores, setHighScores] = useState<HighScore[]>([]);
   const [personalBests, setPersonalBests] = useState<PersonalBests>({});
 
+  // Hint feature state
+  const [hintsLeft, setHintsLeft] = useState(3);
+  const [additionalHints, setAdditionalHints] = useState<{ [key: number]: { hint: string; error?: boolean } }>({});
+  const [hintLoading, setHintLoading] = useState<number | null>(null);
+
   const playSound = useCallback((src: string) => {
     if (isMuted) return;
     audioManager.play(src);
@@ -184,7 +190,6 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    audioManager.init();
     try {
       const storedScores = localStorage.getItem('cyberScrambleHighScores');
       if (storedScores) {
@@ -200,6 +205,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleStartGame = useCallback((name: string) => {
+    audioManager.init(); // Initialize audio on first user interaction
     playSound(SOUNDS.CLICK);
     setNickname(name);
     setGameState(GameState.Playing);
@@ -285,8 +291,50 @@ const App: React.FC = () => {
     setScore(null);
     setCorrectness({});
     setTimeLeft(GAME_DURATION);
+    setHintsLeft(3);
+    setAdditionalHints({});
+    setHintLoading(null);
     fetchNewQuestions();
   }, [playSound, fetchNewQuestions]);
+
+  const handleRequestHint = useCallback(async (question: Question) => {
+    if (hintsLeft <= 0 || additionalHints[question.id] || hintLoading !== null) {
+      return;
+    }
+
+    setHintLoading(question.id);
+    setHintsLeft(prev => prev - 1);
+    playSound(SOUNDS.CLICK);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `The user is playing a word scramble game and asked for a hint. The correct answer is "${question.answer}". The original hint is: "${question.hint}". Provide a new, more direct, one-sentence hint to help them. Do not use the answer word "${question.answer}" or any of its parts in your hint. The hint should be short and clever.`,
+        config: {
+          thinkingConfig: { thinkingBudget: 0 }
+        }
+      });
+      
+      const newHint = response.text.trim();
+      if (!newHint) {
+          throw new Error("API returned an empty hint.");
+      }
+
+      setAdditionalHints(prev => ({
+        ...prev,
+        [question.id]: { hint: newHint },
+      }));
+    } catch (err) {
+      console.error("Failed to fetch hint:", err);
+      setAdditionalHints(prev => ({
+        ...prev,
+        [question.id]: { hint: "Could not generate hint.", error: true },
+      }));
+    } finally {
+      setHintLoading(null);
+    }
+  }, [hintsLeft, additionalHints, hintLoading, playSound]);
 
   useEffect(() => {
     if (gameState !== GameState.Playing || isLoading) {
@@ -322,11 +370,10 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#1a1a1a] font-sans">
       {gameState === GameState.Playing && (
         <div className="sticky top-0 z-10 bg-[#1a1a1a]/80 backdrop-blur-sm shadow-lg py-3">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative flex justify-center items-center">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <HintCounter count={hintsLeft} />
                 <Timer seconds={timeLeft} />
-                <div className="absolute right-4 sm:right-6 lg:right-8 top-1/2 -translate-y-1/2">
-                    <MuteButton isMuted={isMuted} onClick={handleMuteToggle} />
-                </div>
+                <MuteButton isMuted={isMuted} onClick={handleMuteToggle} />
             </div>
         </div>
       )}
@@ -363,6 +410,10 @@ const App: React.FC = () => {
                 onAnswerChange={handleAnswerChange}
                 isFinished={isFinished}
                 isCorrect={isFinished ? correctness[question.id] : undefined}
+                onHintRequest={handleRequestHint}
+                hintData={additionalHints[question.id]}
+                isHintLoading={hintLoading === question.id}
+                canRequestHint={hintsLeft > 0 && hintLoading === null}
               />
             ))}
           </div>
