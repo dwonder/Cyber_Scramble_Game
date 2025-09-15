@@ -94,6 +94,7 @@ const App: React.FC = () => {
   const [nickname, setNickname] = useState<string>('');
   const [userAnswers, setUserAnswers] = useState<UserAnswers>({});
   const [score, setScore] = useState<number | null>(null);
+  const [timeCompleted, setTimeCompleted] = useState<number | null>(null);
   const [correctness, setCorrectness] = useState<{[key: number]: boolean}>({});
   const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
@@ -157,6 +158,9 @@ const App: React.FC = () => {
   const handleSubmit = useCallback(() => {
     if (gameState === GameState.Finished) return;
 
+    const timeTaken = GAME_DURATION - timeLeft;
+    setTimeCompleted(timeTaken);
+
     let currentScore = 0;
     const correctnessMap: {[key: number]: boolean} = {};
     gameQuestions.forEach(q => {
@@ -219,7 +223,7 @@ const App: React.FC = () => {
         playSound(correctnessMap[q.id] ? SOUNDS.CORRECT : SOUNDS.INCORRECT);
       }, 300 + index * 100);
     });
-  }, [userAnswers, gameQuestions, gameState, playSound, nickname]);
+  }, [userAnswers, gameQuestions, gameState, playSound, nickname, timeLeft]);
 
   const handlePlayAgain = useCallback(() => {
     playSound(SOUNDS.CLICK);
@@ -230,6 +234,7 @@ const App: React.FC = () => {
     setTimeLeft(GAME_DURATION);
     setHintsLeft(3);
     setAdditionalHints({});
+    setTimeCompleted(null);
     loadInitialQuestions();
   }, [playSound, loadInitialQuestions]);
 
@@ -293,6 +298,7 @@ const App: React.FC = () => {
                 nickname={nickname}
                 highScores={highScores}
                 personalBest={personalBests[nickname]}
+                timeCompleted={timeCompleted}
               />
              </div>
           )}

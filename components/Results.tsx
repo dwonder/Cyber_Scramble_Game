@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Button from './Button';
 import HighScores from './HighScores';
@@ -10,6 +11,7 @@ interface ResultsProps {
   nickname: string;
   highScores: HighScore[];
   personalBest?: number;
+  timeCompleted: number | null;
 }
 
 const getFeedback = (score: number, total: number, nickname: string): { title: string; message: string; emoji: string } => {
@@ -25,7 +27,13 @@ const getFeedback = (score: number, total: number, nickname: string): { title: s
   }
 };
 
-const Results: React.FC<ResultsProps> = ({ score, totalQuestions, onPlayAgain, nickname, highScores, personalBest }) => {
+const formatTime = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+};
+
+const Results: React.FC<ResultsProps> = ({ score, totalQuestions, onPlayAgain, nickname, highScores, personalBest, timeCompleted }) => {
   const { title, message, emoji } = getFeedback(score, totalQuestions, nickname);
   const isNewPersonalBest = personalBest === undefined || score > personalBest;
 
@@ -33,9 +41,15 @@ const Results: React.FC<ResultsProps> = ({ score, totalQuestions, onPlayAgain, n
     <div className="bg-[#2b2b2b] rounded-xl p-8 text-center max-w-2xl mx-auto border-2 border-gray-700 shadow-xl">
       <div className="text-6xl mb-4">{emoji}</div>
       <h2 className="text-3xl font-bold text-[#ffcc00] mb-2">{title}</h2>
-      <p className="text-xl text-slate-200 mb-2">
+      <p className="text-xl text-slate-200 mb-1">
         You answered <span className="font-bold text-white">{score}</span> out of <span className="font-bold text-white">{totalQuestions}</span> questions correctly.
       </p>
+
+      {timeCompleted !== null && (
+        <p className="text-md text-slate-400 mb-2">
+            Completed in: <span className="font-bold text-white font-mono">{formatTime(timeCompleted)}</span>
+        </p>
+      )}
 
       <div className="h-12 my-2 flex items-center justify-center">
         {isNewPersonalBest && score > 0 && (
