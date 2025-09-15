@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { GameState } from './types';
 import type { UserAnswers, Question, SourceQuestion, HighScore, PersonalBests } from './types';
-import { questions as sourceQuestions, GAME_DURATION } from './constants';
+import { questions as sourceQuestions, GAME_DURATION, QUESTIONS_PER_GAME } from './constants';
 import Header from './components/Header';
 import QuestionCard from './components/QuestionCard';
 import Results from './components/Results';
@@ -75,7 +75,8 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 const prepareGameQuestions = (questions: SourceQuestion[]): Question[] => {
   const shuffledQuestions = shuffleArray(questions);
-  return shuffledQuestions.map((q, index) => {
+  const selectedQuestions = shuffledQuestions.slice(0, QUESTIONS_PER_GAME);
+  return selectedQuestions.map((q, index) => {
     let scrambledLetters = shuffleArray(q.answer.split(''));
     // Re-shuffle if it matches the answer, for words longer than 1 letter
     while (scrambledLetters.join('') === q.answer && q.answer.length > 1) {
