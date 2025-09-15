@@ -10,7 +10,6 @@ interface QuestionCardProps {
   isCorrect?: boolean;
   onHintRequest: (question: Question) => void;
   hintData?: { hint: string; error?: boolean };
-  isHintLoading: boolean;
   canRequestHint: boolean;
 }
 
@@ -22,7 +21,6 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
   isCorrect, 
   onHintRequest,
   hintData,
-  isHintLoading,
   canRequestHint
 }) => {
   const { id, level, scrambled, hint } = question;
@@ -92,7 +90,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
       />
       
       <div className="mt-3 text-center h-12 flex items-center justify-center">
-        {!isFinished && !hintData && !isHintLoading && (
+        {!isFinished && !hintData && (
             <button
                 onClick={() => onHintRequest(question)}
                 disabled={!canRequestHint}
@@ -104,12 +102,6 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
                 </svg>
                 <span>Get Hint</span>
             </button>
-        )}
-        {isHintLoading && (
-            <div className="flex items-center gap-2 text-slate-400">
-                <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
-                <span>Generating...</span>
-            </div>
         )}
         {hintData && (
             <p className={`text-sm text-slate-400 ${hintData.error ? 'text-red-400 not-italic' : 'italic'}`} style={{ animation: 'float-up 0.4s ease-out' }}>

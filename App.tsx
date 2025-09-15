@@ -1,6 +1,5 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { GoogleGenAI, Type } from "@google/genai";
 import { GameState } from './types';
 import type { UserAnswers, Question, SourceQuestion, HighScore, PersonalBests } from './types';
 import { questions as sourceQuestions, GAME_DURATION } from './constants';
@@ -98,8 +97,6 @@ const App: React.FC = () => {
   const [correctness, setCorrectness] = useState<{[key: number]: boolean}>({});
   const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     return localStorage.getItem('cyberScrambleMuted') === 'true';
   });
@@ -109,7 +106,6 @@ const App: React.FC = () => {
   // Hint feature state
   const [hintsLeft, setHintsLeft] = useState(3);
   const [additionalHints, setAdditionalHints] = useState<{ [key: number]: { hint: string; error?: boolean } }>({});
-  const [hintLoading, setHintLoading] = useState<number | null>(null);
 
   const playSound = useCallback((src: string) => {
     if (isMuted) return;
@@ -126,67 +122,8 @@ const App: React.FC = () => {
     }
   };
 
-  const fetchNewQuestions = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: "Generate 15 unique word scramble puzzles about common IT and technical jargon. The puzzles should cover a range of difficulties. For each puzzle, provide a non-technical hint and a single-word, uppercase answer. Format the output as a JSON array of objects, where each object has 'level', 'hint', and 'answer' properties.",
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                level: { type: Type.STRING },
-                hint: { type: Type.STRING },
-                answer: { type: Type.STRING },
-              },
-            },
-          },
-        },
-      });
-
-      let parsedQuestions: any[];
-      try {
-        parsedQuestions = JSON.parse(response.text);
-      } catch (e) {
-        throw new Error("Failed to parse API response as JSON");
-      }
-      
-      if (!Array.isArray(parsedQuestions)) {
-        throw new Error("Invalid response from API: not an array.");
-      }
-      
-      const validQuestions = parsedQuestions
-        .filter(
-          (q): q is SourceQuestion =>
-            q &&
-            typeof q.level === 'string' &&
-            typeof q.hint === 'string' &&
-            typeof q.answer === 'string' &&
-            q.answer.trim() !== ''
-        )
-        .map(q => ({
-          ...q,
-          answer: q.answer.trim().toUpperCase().split(' ')[0], // Sanitize answer
-        }));
-
-      if (validQuestions.length === 0) {
-        throw new Error("API response contained no valid questions");
-      }
-      
-      setGameQuestions(prepareGameQuestions(validQuestions));
-    } catch (err) {
-      console.error("Failed to fetch new questions:", err);
-      setError("Could not generate new puzzles. Playing a default round!");
-      setGameQuestions(prepareGameQuestions(sourceQuestions));
-    } finally {
-      setIsLoading(false);
-    }
+  const loadInitialQuestions = useCallback(() => {
+    setGameQuestions(prepareGameQuestions(sourceQuestions));
   }, []);
 
   useEffect(() => {
@@ -209,8 +146,8 @@ const App: React.FC = () => {
     playSound(SOUNDS.CLICK);
     setNickname(name);
     setGameState(GameState.Playing);
-    fetchNewQuestions();
-  }, [playSound, fetchNewQuestions]);
+    loadInitialQuestions();
+  }, [playSound, loadInitialQuestions]);
 
 
   const handleAnswerChange = useCallback((id: number, answer: string) => {
@@ -293,51 +230,26 @@ const App: React.FC = () => {
     setTimeLeft(GAME_DURATION);
     setHintsLeft(3);
     setAdditionalHints({});
-    setHintLoading(null);
-    fetchNewQuestions();
-  }, [playSound, fetchNewQuestions]);
+    loadInitialQuestions();
+  }, [playSound, loadInitialQuestions]);
 
-  const handleRequestHint = useCallback(async (question: Question) => {
-    if (hintsLeft <= 0 || additionalHints[question.id] || hintLoading !== null) {
+  const handleRequestHint = useCallback((question: Question) => {
+    if (hintsLeft <= 0 || additionalHints[question.id]) {
       return;
     }
 
-    setHintLoading(question.id);
     setHintsLeft(prev => prev - 1);
     playSound(SOUNDS.CLICK);
 
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `The user is playing a word scramble game and asked for a hint. The correct answer is "${question.answer}". The original hint is: "${question.hint}". Provide a new, more direct, one-sentence hint to help them. Do not use the answer word "${question.answer}" or any of its parts in your hint. The hint should be short and clever.`,
-        config: {
-          thinkingConfig: { thinkingBudget: 0 }
-        }
-      });
-      
-      const newHint = response.text.trim();
-      if (!newHint) {
-          throw new Error("API returned an empty hint.");
-      }
-
-      setAdditionalHints(prev => ({
-        ...prev,
-        [question.id]: { hint: newHint },
-      }));
-    } catch (err) {
-      console.error("Failed to fetch hint:", err);
-      setAdditionalHints(prev => ({
-        ...prev,
-        [question.id]: { hint: "Could not generate hint.", error: true },
-      }));
-    } finally {
-      setHintLoading(null);
-    }
-  }, [hintsLeft, additionalHints, hintLoading, playSound]);
+    const newHint = question.extraHint || "No extra hint available for this one!";
+    setAdditionalHints(prev => ({
+      ...prev,
+      [question.id]: { hint: newHint },
+    }));
+  }, [hintsLeft, additionalHints, playSound]);
 
   useEffect(() => {
-    if (gameState !== GameState.Playing || isLoading) {
+    if (gameState !== GameState.Playing) {
       return;
     }
     if (timeLeft <= 0) {
@@ -348,22 +260,12 @@ const App: React.FC = () => {
       setTimeLeft(prevTime => prevTime - 1);
     }, 1000);
     return () => clearInterval(timerId);
-  }, [gameState, timeLeft, handleSubmit, isLoading]);
+  }, [gameState, timeLeft, handleSubmit]);
 
   if (gameState === GameState.StartScreen) {
     return <StartScreen onStartGame={handleStartGame} />;
   }
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center text-center p-4">
-        <div className="loader mb-4"></div>
-        <h1 className="text-2xl font-bold text-[#ffcc00]">Generating New Puzzles...</h1>
-        <p className="text-slate-400">Please wait a moment.</p>
-      </div>
-    );
-  }
-
+  
   const isFinished = gameState === GameState.Finished;
 
   return (
@@ -381,12 +283,6 @@ const App: React.FC = () => {
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="max-w-4xl mx-auto">
           <Header />
-
-           {error && (
-            <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg relative mb-6 text-center" role="alert">
-              <span className="block sm:inline">{error}</span>
-            </div>
-          )}
           
           {isFinished && score !== null && (
              <div className="mb-8">
@@ -412,8 +308,7 @@ const App: React.FC = () => {
                 isCorrect={isFinished ? correctness[question.id] : undefined}
                 onHintRequest={handleRequestHint}
                 hintData={additionalHints[question.id]}
-                isHintLoading={hintLoading === question.id}
-                canRequestHint={hintsLeft > 0 && hintLoading === null}
+                canRequestHint={hintsLeft > 0 && !additionalHints[question.id]}
               />
             ))}
           </div>

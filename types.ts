@@ -2,6 +2,7 @@ export interface SourceQuestion {
   level: string;
   hint: string;
   answer: string;
+  extraHint: string;
 }
 
 export interface Question extends SourceQuestion {
