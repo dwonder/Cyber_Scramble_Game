@@ -25,7 +25,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
   isHintLoading,
   canRequestHint
 }) => {
-  const { id, level, scrambled, hint, answer } = question;
+  const { id, level, scrambled, hint } = question;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onAnswerChange(id, e.target.value);
@@ -118,12 +118,6 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
             </p>
         )}
       </div>
-
-      {isFinished && !isCorrect && (
-        <p className="mt-2 text-sm text-[#ff6666] text-center">
-          Correct answer: <span className="font-bold">{answer}</span>
-        </p>
-      )}
     </div>
   );
 };
